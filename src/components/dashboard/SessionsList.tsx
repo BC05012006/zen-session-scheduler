@@ -20,8 +20,12 @@ export function SessionsList() {
   const [searchTerm, setSearchTerm] = useState("");
   
   const handleStatusChange = (value: string) => {
-    const status = value as SessionStatus | "";
-    filterSessions(status === "all" ? "" : status, searchTerm);
+    if (value === "all") {
+      filterSessions("", searchTerm);
+    } else {
+      const status = value as SessionStatus;
+      filterSessions(status, searchTerm);
+    }
   };
   
   const handleSearch = (e: React.FormEvent) => {
@@ -57,6 +61,7 @@ export function SessionsList() {
               <SelectItem value="all">All Sessions</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
               <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="in-progress">In Progress</SelectItem>
             </SelectContent>
           </Select>
           

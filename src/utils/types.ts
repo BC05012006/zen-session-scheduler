@@ -16,6 +16,7 @@ export interface MeditationSession {
   status: SessionStatus;
   userId: string;
   notes?: string;
+  elapsedTime?: number; // in seconds
 }
 
 export interface SessionMetrics {
