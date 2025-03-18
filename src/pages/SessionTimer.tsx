@@ -33,7 +33,7 @@ const SessionTimer = () => {
   }, [session]);
   
   useEffect(() => {
-    let interval: number;
+    let interval: NodeJS.Timeout;
     
     if (isRunning) {
       interval = setInterval(() => {
