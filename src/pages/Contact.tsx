@@ -109,8 +109,8 @@ const Contact = () => {
                 <div>
                   <h3 className="font-medium">Email Us</h3>
                   <p className="text-muted-foreground mt-1">
-                    <a href="mailto:support@zenmind.com" className="hover:text-meditation-purple">
-                      support@zenmind.com
+                    <a href="mailto:727823tuec022@skct.edu.in" className="hover:text-meditation-purple">
+                      727823tuec022@skct.edu.in
                     </a>
                   </p>
                 </div>
