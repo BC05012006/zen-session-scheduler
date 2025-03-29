@@ -2,6 +2,8 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from '@/utils/types';
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { Session, AuthError } from "@supabase/supabase-js";
 
 interface AuthContextType {
   user: User | null;
@@ -9,47 +11,66 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  session: Session | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for saved user in localStorage
-    const savedUser = localStorage.getItem('meditation-user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
-    setIsLoading(false);
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, currentSession) => {
+        setSession(currentSession);
+        if (currentSession) {
+          setUser({
+            id: currentSession.user.id,
+            email: currentSession.user.email || '',
+            name: currentSession.user.user_metadata.name as string || ''
+          });
+        } else {
+          setUser(null);
+        }
+        setIsLoading(false);
+      }
+    );
+
+    // Get the initial session
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      setSession(initialSession);
+      if (initialSession) {
+        setUser({
+          id: initialSession.user.id,
+          email: initialSession.user.email || '',
+          name: initialSession.user.user_metadata.name as string || ''
+        });
+      }
+      setIsLoading(false);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
       
-      // Simple validation (would be handled by backend)
-      if (email && password.length >= 6) {
-        // Mock user data - in a real app, this would come from a backend
-        const loggedInUser: User = {
-          id: '1',
-          email: email,
-          name: 'Demo User'
-        };
-        
-        setUser(loggedInUser);
-        localStorage.setItem('meditation-user', JSON.stringify(loggedInUser));
-        toast.success('Successfully logged in');
-        return;
-      }
-      throw new Error('Invalid credentials');
+      if (error) throw error;
+      toast.success('Successfully logged in');
     } catch (error) {
-      toast.error('Login failed. Please check your credentials.');
+      const authError = error as AuthError;
+      toast.error(`Login failed: ${authError.message}`);
       throw error;
     } finally {
       setIsLoading(false);
@@ -59,36 +80,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const register = async (name: string, email: string, password: string) => {
     setIsLoading(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name
+          }
+        }
+      });
       
-      // Simple validation (would be handled by backend)
-      if (name && email && password.length >= 6) {
-        // Create a new user
-        const newUser: User = {
-          id: Date.now().toString(),
-          email,
-          name
-        };
-        
-        setUser(newUser);
-        localStorage.setItem('meditation-user', JSON.stringify(newUser));
-        toast.success('Account created successfully');
-        return;
-      }
-      throw new Error('Invalid registration data');
+      if (error) throw error;
+      toast.success('Account created successfully');
     } catch (error) {
-      toast.error('Registration failed. Please try again.');
+      const authError = error as AuthError;
+      toast.error(`Registration failed: ${authError.message}`);
       throw error;
     } finally {
       setIsLoading(false);
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('meditation-user');
-    setUser(null);
-    toast.info('You have been logged out');
+  const logout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      toast.info('You have been logged out');
+    } catch (error) {
+      const authError = error as AuthError;
+      toast.error(`Logout error: ${authError.message}`);
+    }
   };
 
   return (
@@ -98,7 +119,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       isLoading,
       login,
       register,
-      logout
+      logout,
+      session
     }}>
       {children}
     </AuthContext.Provider>

@@ -3,6 +3,8 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { MeditationSession, SessionMetrics, ChartData } from '@/utils/types';
 import { toast } from "sonner";
 import { format } from 'date-fns';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from "@/integrations/supabase/client";
 
 interface SessionsContextType {
   sessions: MeditationSession[];
@@ -10,66 +12,16 @@ interface SessionsContextType {
   metrics: SessionMetrics;
   chartData: ChartData[];
   isLoading: boolean;
-  addSession: (session: Omit<MeditationSession, 'id' | 'userId' | 'status'>) => void;
-  editSession: (id: string, session: Partial<MeditationSession>) => void;
-  deleteSession: (id: string) => void;
+  addSession: (session: Omit<MeditationSession, 'id' | 'userId' | 'status'>) => Promise<void>;
+  editSession: (id: string, session: Partial<MeditationSession>) => Promise<void>;
+  deleteSession: (id: string) => Promise<void>;
   filterSessions: (status?: string, searchTerm?: string) => void;
 }
 
 const SessionsContext = createContext<SessionsContextType | undefined>(undefined);
 
-// Mock data
-const generateMockSessions = (): MeditationSession[] => {
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  
-  return [
-    {
-      id: '1',
-      title: 'Morning Mindfulness',
-      duration: 15,
-      date: format(yesterday, 'yyyy-MM-dd'),
-      time: '08:00',
-      status: 'completed',
-      userId: '1',
-      notes: 'Focused on breathing techniques'
-    },
-    {
-      id: '2',
-      title: 'Midday Reset',
-      duration: 10,
-      date: format(today, 'yyyy-MM-dd'),
-      time: '13:30',
-      status: 'completed',
-      userId: '1'
-    },
-    {
-      id: '3',
-      title: 'Evening Relaxation',
-      duration: 20,
-      date: format(today, 'yyyy-MM-dd'),
-      time: '21:00',
-      status: 'pending',
-      userId: '1',
-      notes: 'Prepare by dimming lights and using essential oils'
-    },
-    {
-      id: '4',
-      title: 'Visualization Practice',
-      duration: 25,
-      date: format(tomorrow, 'yyyy-MM-dd'),
-      time: '10:15',
-      status: 'pending',
-      userId: '1'
-    }
-  ];
-};
-
 export const SessionsProvider = ({ children }: { children: ReactNode }) => {
+  const { user, isAuthenticated } = useAuth();
   const [sessions, setSessions] = useState<MeditationSession[]>([]);
   const [filteredSessions, setFilteredSessions] = useState<MeditationSession[]>([]);
   const [metrics, setMetrics] = useState<SessionMetrics>({ total: 0, completed: 0, pending: 0 });
@@ -77,27 +29,56 @@ export const SessionsProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState({ status: '', searchTerm: '' });
 
+  // Fetch sessions when user is authenticated
   useEffect(() => {
-    // Load saved sessions or use mock data
-    const savedSessions = localStorage.getItem('meditation-sessions');
-    const initialSessions = savedSessions ? JSON.parse(savedSessions) : generateMockSessions();
-    
-    setSessions(initialSessions);
-    setFilteredSessions(initialSessions);
-    updateMetrics(initialSessions);
-    setIsLoading(false);
-  }, []);
+    const fetchSessions = async () => {
+      if (!isAuthenticated || !user) {
+        setSessions([]);
+        setFilteredSessions([]);
+        setIsLoading(false);
+        return;
+      }
 
-  useEffect(() => {
-    // Save to localStorage whenever sessions change
-    if (sessions.length > 0) {
-      localStorage.setItem('meditation-sessions', JSON.stringify(sessions));
-    }
-  }, [sessions]);
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('meditation_sessions')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        const formattedSessions: MeditationSession[] = data.map(session => ({
+          id: session.id,
+          title: session.title,
+          duration: session.duration,
+          date: session.date,
+          time: session.time,
+          status: session.status,
+          userId: session.user_id,
+          notes: session.notes || undefined,
+          elapsedTime: session.elapsed_time
+        }));
+        
+        setSessions(formattedSessions);
+        setFilteredSessions(formattedSessions);
+        updateMetrics(formattedSessions);
+      } catch (error) {
+        console.error('Error fetching sessions:', error);
+        toast.error('Failed to load meditation sessions');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchSessions();
+  }, [isAuthenticated, user]);
 
   const updateMetrics = (sessionsList: MeditationSession[]) => {
     const completed = sessionsList.filter(s => s.status === 'completed').length;
     const pending = sessionsList.filter(s => s.status === 'pending').length;
+    const inProgress = sessionsList.filter(s => s.status === 'in-progress').length;
     const total = sessionsList.length;
     
     setMetrics({ total, completed, pending });
@@ -106,54 +87,130 @@ export const SessionsProvider = ({ children }: { children: ReactNode }) => {
     setChartData([
       { name: 'Completed', value: completed, color: '#9b87f5' },
       { name: 'Pending', value: pending, color: '#D3E4FD' },
+      { name: 'In Progress', value: inProgress, color: '#ffd166' }
     ]);
   };
 
-  const addSession = (sessionData: Omit<MeditationSession, 'id' | 'userId' | 'status'>) => {
-    const newSession: MeditationSession = {
-      ...sessionData,
-      id: Date.now().toString(),
-      userId: '1', // In a real app, this would come from auth
-      status: 'pending'
-    };
-    
-    const updatedSessions = [...sessions, newSession];
-    setSessions(updatedSessions);
-    
-    // Apply current filter to updated sessions
-    filterSessions(filter.status, filter.searchTerm, updatedSessions);
-    
-    updateMetrics(updatedSessions);
-    toast.success('Meditation session scheduled');
-    
-    // In a real app, here's where we'd send email notifications
-    console.log('Email notification sent for new session:', newSession.title);
+  const addSession = async (sessionData: Omit<MeditationSession, 'id' | 'userId' | 'status'>) => {
+    if (!isAuthenticated || !user) {
+      toast.error('You must be logged in to add a session');
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('meditation_sessions')
+        .insert({
+          user_id: user.id,
+          title: sessionData.title,
+          duration: sessionData.duration,
+          date: sessionData.date,
+          time: sessionData.time,
+          status: 'pending',
+          notes: sessionData.notes,
+          elapsed_time: 0
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      const newSession: MeditationSession = {
+        id: data.id,
+        title: data.title,
+        duration: data.duration,
+        date: data.date,
+        time: data.time,
+        status: data.status,
+        userId: data.user_id,
+        notes: data.notes || undefined,
+        elapsedTime: data.elapsed_time
+      };
+      
+      const updatedSessions = [...sessions, newSession];
+      setSessions(updatedSessions);
+      
+      // Apply current filter to updated sessions
+      filterSessions(filter.status, filter.searchTerm, updatedSessions);
+      
+      updateMetrics(updatedSessions);
+      toast.success('Meditation session scheduled');
+    } catch (error) {
+      console.error('Error adding session:', error);
+      toast.error('Failed to schedule meditation session');
+    }
   };
 
-  const editSession = (id: string, sessionData: Partial<MeditationSession>) => {
-    const updatedSessions = sessions.map(session => 
-      session.id === id ? { ...session, ...sessionData } : session
-    );
-    
-    setSessions(updatedSessions);
-    
-    // Apply current filter to updated sessions
-    filterSessions(filter.status, filter.searchTerm, updatedSessions);
-    
-    updateMetrics(updatedSessions);
-    toast.success('Meditation session updated');
+  const editSession = async (id: string, sessionData: Partial<MeditationSession>) => {
+    if (!isAuthenticated) {
+      toast.error('You must be logged in to edit a session');
+      return;
+    }
+
+    try {
+      // Convert from our frontend model to database model
+      const dbData: any = {};
+      if (sessionData.title) dbData.title = sessionData.title;
+      if (sessionData.duration) dbData.duration = sessionData.duration;
+      if (sessionData.date) dbData.date = sessionData.date;
+      if (sessionData.time) dbData.time = sessionData.time;
+      if (sessionData.status) dbData.status = sessionData.status;
+      if (sessionData.notes !== undefined) dbData.notes = sessionData.notes;
+      if (sessionData.elapsedTime !== undefined) dbData.elapsed_time = sessionData.elapsedTime;
+      
+      const { error } = await supabase
+        .from('meditation_sessions')
+        .update(dbData)
+        .eq('id', id)
+        .eq('user_id', user?.id);
+      
+      if (error) throw error;
+      
+      const updatedSessions = sessions.map(session => 
+        session.id === id ? { ...session, ...sessionData } : session
+      );
+      
+      setSessions(updatedSessions);
+      
+      // Apply current filter to updated sessions
+      filterSessions(filter.status, filter.searchTerm, updatedSessions);
+      
+      updateMetrics(updatedSessions);
+      toast.success('Meditation session updated');
+    } catch (error) {
+      console.error('Error updating session:', error);
+      toast.error('Failed to update meditation session');
+    }
   };
 
-  const deleteSession = (id: string) => {
-    const updatedSessions = sessions.filter(session => session.id !== id);
-    
-    setSessions(updatedSessions);
-    
-    // Apply current filter to updated sessions
-    filterSessions(filter.status, filter.searchTerm, updatedSessions);
-    
-    updateMetrics(updatedSessions);
-    toast.success('Meditation session deleted');
+  const deleteSession = async (id: string) => {
+    if (!isAuthenticated) {
+      toast.error('You must be logged in to delete a session');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('meditation_sessions')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user?.id);
+      
+      if (error) throw error;
+      
+      const updatedSessions = sessions.filter(session => session.id !== id);
+      
+      setSessions(updatedSessions);
+      
+      // Apply current filter to updated sessions
+      filterSessions(filter.status, filter.searchTerm, updatedSessions);
+      
+      updateMetrics(updatedSessions);
+      toast.success('Meditation session deleted');
+    } catch (error) {
+      console.error('Error deleting session:', error);
+      toast.error('Failed to delete meditation session');
+    }
   };
 
   const filterSessions = (status?: string, searchTerm?: string, sessionsList = sessions) => {
