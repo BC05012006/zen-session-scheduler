@@ -1,8 +1,6 @@
-
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { MeditationSession, SessionMetrics, ChartData } from '@/utils/types';
+import { MeditationSession, SessionMetrics, ChartData, SessionStatus } from '@/utils/types';
 import { toast } from "sonner";
-import { format } from 'date-fns';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from "@/integrations/supabase/client";
 
@@ -29,7 +27,6 @@ export const SessionsProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState({ status: '', searchTerm: '' });
 
-  // Fetch sessions when user is authenticated
   useEffect(() => {
     const fetchSessions = async () => {
       if (!isAuthenticated || !user) {
@@ -55,7 +52,7 @@ export const SessionsProvider = ({ children }: { children: ReactNode }) => {
           duration: session.duration,
           date: session.date,
           time: session.time,
-          status: session.status,
+          status: session.status as SessionStatus,
           userId: session.user_id,
           notes: session.notes || undefined,
           elapsedTime: session.elapsed_time
@@ -83,7 +80,6 @@ export const SessionsProvider = ({ children }: { children: ReactNode }) => {
     
     setMetrics({ total, completed, pending });
     
-    // Update chart data
     setChartData([
       { name: 'Completed', value: completed, color: '#9b87f5' },
       { name: 'Pending', value: pending, color: '#D3E4FD' },
@@ -106,7 +102,7 @@ export const SessionsProvider = ({ children }: { children: ReactNode }) => {
           duration: sessionData.duration,
           date: sessionData.date,
           time: sessionData.time,
-          status: 'pending',
+          status: 'pending' as SessionStatus,
           notes: sessionData.notes,
           elapsed_time: 0
         })
@@ -121,7 +117,7 @@ export const SessionsProvider = ({ children }: { children: ReactNode }) => {
         duration: data.duration,
         date: data.date,
         time: data.time,
-        status: data.status,
+        status: data.status as SessionStatus,
         userId: data.user_id,
         notes: data.notes || undefined,
         elapsedTime: data.elapsed_time
@@ -130,7 +126,6 @@ export const SessionsProvider = ({ children }: { children: ReactNode }) => {
       const updatedSessions = [...sessions, newSession];
       setSessions(updatedSessions);
       
-      // Apply current filter to updated sessions
       filterSessions(filter.status, filter.searchTerm, updatedSessions);
       
       updateMetrics(updatedSessions);
@@ -148,7 +143,6 @@ export const SessionsProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
-      // Convert from our frontend model to database model
       const dbData: any = {};
       if (sessionData.title) dbData.title = sessionData.title;
       if (sessionData.duration) dbData.duration = sessionData.duration;
@@ -172,7 +166,6 @@ export const SessionsProvider = ({ children }: { children: ReactNode }) => {
       
       setSessions(updatedSessions);
       
-      // Apply current filter to updated sessions
       filterSessions(filter.status, filter.searchTerm, updatedSessions);
       
       updateMetrics(updatedSessions);
@@ -202,7 +195,6 @@ export const SessionsProvider = ({ children }: { children: ReactNode }) => {
       
       setSessions(updatedSessions);
       
-      // Apply current filter to updated sessions
       filterSessions(filter.status, filter.searchTerm, updatedSessions);
       
       updateMetrics(updatedSessions);
@@ -214,7 +206,6 @@ export const SessionsProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const filterSessions = (status?: string, searchTerm?: string, sessionsList = sessions) => {
-    // Store the current filter
     setFilter({ 
       status: status || filter.status, 
       searchTerm: searchTerm !== undefined ? searchTerm : filter.searchTerm 
@@ -222,12 +213,10 @@ export const SessionsProvider = ({ children }: { children: ReactNode }) => {
     
     let filtered = [...sessionsList];
     
-    // Filter by status if provided
     if (status) {
       filtered = filtered.filter(session => session.status === status);
     }
     
-    // Filter by search term if provided
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(session => 
