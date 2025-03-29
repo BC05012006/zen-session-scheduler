@@ -6,14 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, UserPlus } from "lucide-react";
 
 export function LoginForm() {
+  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
-  const { login, isLoading } = useAuth();
+  const { login, register, isLoading } = useAuth();
   const navigate = useNavigate();
   
   const handleSubmit = async (e: React.FormEvent) => {
@@ -21,23 +23,50 @@ export function LoginForm() {
     setError("");
     
     try {
-      await login(email, password);
+      if (isLogin) {
+        await login(email, password);
+      } else {
+        await register(name, email, password);
+      }
       navigate("/dashboard");
     } catch (err) {
-      setError("Invalid credentials. Please try again.");
+      setError(isLogin ? "Invalid credentials. Please try again." : "Registration failed. Please try again.");
     }
+  };
+
+  const toggleMode = () => {
+    setError("");
+    setIsLogin(!isLogin);
   };
   
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
-        <CardTitle className="text-2xl text-center gradient-text">Welcome Back</CardTitle>
+        <CardTitle className="text-2xl text-center gradient-text">
+          {isLogin ? "Welcome Back" : "Create Account"}
+        </CardTitle>
         <CardDescription className="text-center">
-          Enter your credentials to access your meditation sessions
+          {isLogin 
+            ? "Enter your credentials to access your meditation sessions" 
+            : "Sign up to start your meditation journey"}
         </CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
+          {!isLogin && (
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                type="text"
+                placeholder="Your name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required={!isLogin}
+              />
+            </div>
+          )}
+          
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input
@@ -49,6 +78,7 @@ export function LoginForm() {
               required
             />
           </div>
+          
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
             <div className="relative">
@@ -85,14 +115,30 @@ export function LoginForm() {
             <p>For demo purposes, any email and password (min 6 chars) will work.</p>
           </div>
         </CardContent>
-        <CardFooter>
+        
+        <CardFooter className="flex flex-col space-y-3">
           <Button 
             type="submit" 
             className="w-full bg-meditation-purple hover:bg-meditation-dark-purple"
             disabled={isLoading}
           >
-            {isLoading ? "Signing in..." : "Sign In"}
+            {isLoading 
+              ? (isLogin ? "Signing in..." : "Signing up...") 
+              : (isLogin ? "Sign In" : "Sign Up")}
           </Button>
+          
+          <div className="w-full text-center">
+            <Button 
+              type="button"
+              variant="ghost" 
+              onClick={toggleMode}
+              className="text-sm"
+            >
+              {isLogin 
+                ? "Don't have an account? Sign up" 
+                : "Already have an account? Sign in"}
+            </Button>
+          </div>
         </CardFooter>
       </form>
     </Card>
