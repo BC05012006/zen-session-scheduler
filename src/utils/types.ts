@@ -1,3 +1,4 @@
+
 export interface User {
   id: string;
   email: string;
@@ -28,4 +29,19 @@ export interface ChartData {
   name: string;
   value: number;
   color: string;
+}
+
+export type TaskPriority = 'low' | 'medium' | 'high';
+export type TaskStatus = 'pending' | 'in-progress' | 'completed';
+
+export interface Task {
+  id: string;
+  title: string;
+  description?: string;
+  status: TaskStatus;
+  dueDate?: string;
+  priority: TaskPriority;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
 }
